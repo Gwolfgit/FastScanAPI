@@ -21,7 +21,7 @@ with CONFIG_PATH.open() as f:
 app = FastAPI()
 security = HTTPBasic()
 db = Database()
-celery_app = Celery(__name__, broker=config['celery_broker'])
+celery_app = Celery(__name__, broker=config["celery_broker"])
 
 
 # Database Models
@@ -48,7 +48,7 @@ class Results(db.Entity):
     data = Required(str)
 
 
-db.bind(provider='sqlite', filename=':memory:', create_db=True)
+db.bind(provider="sqlite", filename=":memory:", create_db=True)
 db.generate_mapping(create_tables=True)
 
 
@@ -67,10 +67,11 @@ class ScanType(Enum):
 
 # Validator for cron expressions
 def validate_cron(cls, value, field):
-    allowed_chars = set('0123456789*/,-')
+    allowed_chars = set("0123456789*/,-")
     if not set(value).issubset(allowed_chars):
         raise ValueError(f"Invalid characters in {field.name}: {value}")
     return value
+
 
 class CronModel(BaseModel):
     minute: Optional[str] = Field(None, validator=validate_cron)
@@ -79,33 +80,37 @@ class CronModel(BaseModel):
     day_of_month: Optional[str] = Field(None, validator=validate_cron)
     month_of_year: Optional[str] = Field(None, validator=validate_cron)
 
+
 class AddScanModel(BaseModel):
-    host: List[constr(regex=r'^[a-zA-Z0-9.-]{1,255}$')][:20] = Field(...)
+    host: List[constr(regex=r"^[a-zA-Z0-9.-]{1,255}$")][:20] = Field(...)
     common: bool = Field(...)
     ports: str = Field(None)
-    exclude: Optional[constr(regex=r'^[\d,-]*$')] = Field(None)
+    exclude: Optional[constr(regex=r"^[\d,-]*$")] = Field(None)
     resolve: bool = Field(...)
     timing: Optional[conint(ge=0, le=5)] = Field(None)
     max_retry: Optional[conint(ge=0, le=5)] = Field(None)
     cron: CronModel = Field(...)
-    tag: Optional[constr(regex=r'^[a-zA-Z0-9-]*$')] = Field(None)
+    tag: Optional[constr(regex=r"^[a-zA-Z0-9-]*$")] = Field(None)
     scan_type: ScanType = Field(...)
     ping: bool = Field(...)
     postback: Optional[HttpUrl] = Field(None)
 
+
 class DelScanModel(BaseModel):
     scan_id: str = Field(...)
     tag: Optional[str] = Field(None)
+
 
 class ResultModel(BaseModel):
     scan_id: str = Field(...)
     tag: Optional[str] = Field(None)
     data: str = Field(...)
 
+
 # Auth Dependency
 def get_current_username(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_username = secrets.compare_digest(credentials.username, config['username'])
-    correct_password = secrets.compare_digest(credentials.password, config['password'])
+    correct_username = secrets.compare_digest(credentials.username, config["username"])
+    correct_password = secrets.compare_digest(credentials.password, config["password"])
     if not (correct_username and correct_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -134,13 +139,24 @@ def add_scan(scan: AddScanModel, _: str = Depends(get_current_username)):
             scan_type=scan.scan_type.value,
             ping=scan.ping,
             postback=scan.postback,
-            enabled=True
+            enabled=True,
         )
     celery_app.add_periodic_task(
         crontab(**scan.cron.dict()),
-        scan.run(scan_id=scan_id, host=scan.host, common=scan.common, ports=scan.ports, exclude=scan.exclude,
-                 resolve=scan.resolve, timing=scan.timing, max_retry=scan.max_retry, tag=scan.tag,
-                 scan_type=scan.scan_type.value, ping=scan.ping, postback=scan.postback)
+        scan.run(
+            scan_id=scan_id,
+            host=scan.host,
+            common=scan.common,
+            ports=scan.ports,
+            exclude=scan.exclude,
+            resolve=scan.resolve,
+            timing=scan.timing,
+            max_retry=scan.max_retry,
+            tag=scan.tag,
+            scan_type=scan.scan_type.value,
+            ping=scan.ping,
+            postback=scan.postback,
+        ),
     )
     return {"message": "Scan scheduled successfully", "scan_id": scan_id}
 
@@ -157,7 +173,9 @@ def delete_scan(del_request: DelScanModel, _: str = Depends(get_current_username
 
 
 @app.get("/results/{scan_id}/{tag}")
-def get_results(scan_id: str, tag: Optional[str], _: str = Depends(get_current_username)):
+def get_results(
+    scan_id: str, tag: Optional[str], _: str = Depends(get_current_username)
+):
     with db_session:
         scan = Scan.get(scan_id=scan_id, tag=tag, enabled=True)
         if not scan:
@@ -169,7 +187,9 @@ def get_results(scan_id: str, tag: Optional[str], _: str = Depends(get_current_u
 
 
 @app.get("/historic/{scan_id}/{tag}")
-def get_historic(scan_id: str, tag: Optional[str], _: str = Depends(get_current_username)):
+def get_historic(
+    scan_id: str, tag: Optional[str], _: str = Depends(get_current_username)
+):
     with db_session:
         result = Results.get(scan_id=scan_id, tag=tag)
         if not result:
